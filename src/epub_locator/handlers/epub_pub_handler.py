@@ -1,7 +1,6 @@
 from urllib.parse import urlparse
 import re
 import cloudscraper
-from bs4 import BeautifulSoup, Tag
 
 from src.epub_locator.epub_handler import EpubHandler
 
@@ -17,8 +16,7 @@ class EpubPubHandler(EpubHandler):
         elif domain == "asset.epub.pub":
             epub_base_url: str = self._get_epub_base_url_from_specific_url(self.url)
         else:
-            spread_url: str = self._get_epub_pub_read_online_url()
-            content_opf_url: str = self._get_epub_pub_ebook_content_opf_url(spread_url)
+            content_opf_url: str = self._get_epub_pub_read_online_url()
             epub_base_url: str = self._get_epub_base_url_from_specific_url(
                 content_opf_url
             )
@@ -43,15 +41,18 @@ class EpubPubHandler(EpubHandler):
         scraper = cloudscraper.create_scraper()
         response = scraper.get(self.url)
         response.raise_for_status()
-        soup = BeautifulSoup(response.content, "html.parser")
-        read_online_button: str = soup.find("a", class_="btn-read")
-        if not read_online_button or not isinstance(read_online_button, Tag):
-            raise RuntimeError("Failed to find the 'Read Online' link.")
-
-        domain: str = read_online_button.get("data-domain", "")
-        read_id: str = read_online_button.get("data-readid", "")
-        read_online_url: str = f"{domain}/epub/{read_id}"
-
+        # get fullUrl, part of online_url
+        full_url_pattern = r'\\"fullUrl\\":\s*\\"([^\\]+)\\"'
+        full_url_match = re.search(full_url_pattern, response.text)
+        if not full_url_match:
+            raise RuntimeError("Failed to find the 'fullUrl'.")
+        # get packageOpfPath, part of online_url
+        package_opf_path_pattern = r'\\"packageOpfPath\\":\s*\\"([^\\]+)\\"'
+        package_opf_path_match = re.search(package_opf_path_pattern, response.text)
+        if not package_opf_path_match:
+            raise RuntimeError("Failed to find 'packageOpfPath'.")
+        # construct online_url
+        read_online_url: str = f"https://asset.epub.pub/epub{full_url_match.group(1)}/{package_opf_path_match.group(1)}"
         return read_online_url
 
     def _get_epub_pub_ebook_content_opf_url(self, read_online_url: str) -> str:
